@@ -419,6 +419,20 @@ async function marcarFechaSeguimiento(id, fecha) {
 async function marcarMotivoSeguimiento(id, motivo) {
   return marcarCampo("MotivoSeguimiento", id, motivo);
 }
+async function enviarRecordatorioEmail(id, when) {
+  try {
+    const whenValue = String(when || '').trim();
+    if (!whenValue) {
+      return { status: 'skipped', message: 'Sin envío de email' };
+    }
+
+    const query = `sendReminder=${encodeURIComponent(id)}&when=${encodeURIComponent(whenValue)}`;
+    return await safeFetch(`${urlApi}?${query}`);
+  } catch (e) {
+    handleError('Error al enviar/programar email recordatorio', e);
+    throw e;
+  }
+}
 // Función para ocultar fila (soft delete)
 async function ocultarFila(id) {
   try {
@@ -1317,6 +1331,15 @@ if (tipoVivienda?.trim().toLowerCase() === 'villas isla de cortegada') {
           <label for="motivo-${idPersona}" style="font-weight:500;">Motivo/recordatorio:</label>
           <input type="text" id="motivo-${idPersona}" placeholder="Ej.: recordar enviar presupuesto" value="${c['MotivoSeguimiento'] || ''}" class="form-control form-control-sm" aria-label="Motivo del recordatorio" />
         </div>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem;">
+          <label for="email-aviso-${idPersona}" style="font-weight:500;">Email de aviso:</label>
+          <select id="email-aviso-${idPersona}" class="form-select form-select-sm" aria-label="Cuándo enviar email recordatorio">
+            <option value="">No enviar</option>
+            <option value="exact">A la hora exacta</option>
+            <option value="1h">1 hora antes</option>
+            <option value="1d">1 día antes</option>
+          </select>
+        </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-sm btn-primary btn-programar-recordatorio" data-id="${idPersona}" aria-label="Programar recordatorio">Programar</button>
           <button class="btn btn-sm btn-outline-success btn-marcar-hecho" data-id="${idPersona}" aria-label="Marcar como hecho">Marcar hecho</button>
@@ -1394,6 +1417,7 @@ function agregarListenersDetalle(trDetalle, idPersona, c, tipoVivienda) {
 const inputFecha = trDetalle.querySelector(`#fecha-${idPersona}`);
 const inputHora = trDetalle.querySelector(`#hora-${idPersona}`);
 const inputMotivo = trDetalle.querySelector(`#motivo-${idPersona}`);
+const selectEmailAviso = trDetalle.querySelector(`#email-aviso-${idPersona}`);
 const avisoDiv = trDetalle.querySelector(`#aviso-recordatorio-${idPersona}`);
 
   const btnProgramar = trDetalle.querySelector('.btn-programar-recordatorio');
@@ -1501,6 +1525,15 @@ if (tipoVivienda?.trim().toLowerCase() === 'villas isla de cortegada' && selecto
 
       // 5. Actualizar el panel de detalles (sigue siendo útil)
       actualizarAvisoRecordatorio(avisoDiv, `${fechaStr} ${horaFinal}`);
+
+      // 6. Disparar envío/programación de email de aviso (si se seleccionó opción)
+      const emailWhen = selectEmailAviso?.value || '';
+      if (emailWhen) {
+        const emailResult = await enviarRecordatorioEmail(idPersona, emailWhen);
+        if (emailResult.status !== 'success') {
+          throw new Error(emailResult.message || 'No se pudo enviar/programar el email recordatorio');
+        }
+      }
 
     } catch (e) {
       alert('Error al programar recordatorio: ' + e.message);
